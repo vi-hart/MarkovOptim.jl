@@ -1,5 +1,9 @@
 module MarkovOptim
 
-# Write your package code here.
+using Distributions
+
+export RandomParameter
+
+include("random_parameter.jl")
 
 end
