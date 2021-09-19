@@ -31,10 +31,11 @@ function MarkovModel(
     graph::SimpleGraph{T};
     open::T = one(T),
     terms::T = one(T) << 1,
-    rate_function::Symbol = :sigmoid,
+    rate_function::Symbol = :Sigmoid,
+    shift::Bool = true,
     qwargs...) where T<:Integer
 
-    ratef = getfield(MarkovOptim, rate_function)
+    ratef = getfield(MarkovOptim, rate_function)(shift)
     return MarkovModel(graph, open, terms, ratef; qwargs...)
 end
 

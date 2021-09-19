@@ -17,5 +17,5 @@ function (rate::RateFunction)(x::T, ps::Vector) where T
 end
 
 # Simple rate functions
-sigmoid = RateFunction((x, p) -> tanh((x + p[1])/p[2]), 2, true)
-linear = RateFunction((x, p) -> p[1]*x, 1, true)
+Sigmoid(shift::Bool=true) = RateFunction((x, p) -> tanh((x + p[1])/p[2]), 2, shift)
+Linear(shift::Bool=true) = RateFunction((x, p) -> p[1]*x, 1, shift)
