@@ -23,7 +23,7 @@ get_distribution(RP::RandomParameter) = getfield(RP, :dist)
 Distributions.Distribution(RP::RandomParameter) = getfield(RP, :dist)
 Distributions.params(RP::RandomParameter) = Distributions.params(getfield(RP, :dist))
 
-@inline Base.size(RP::RandomParameter) = (length(RP.ps), size(RP.ps[1])...)
+@inline Base.size(RP::RandomParameter) = isempty(RP.ps) ? (0, 0) : (length(RP.ps), size(RP.ps[1])...)
 @inline Base.length(RP::RandomParameter) = prod(size(RP))
 @inline Base.eachindex(RP::RandomParameter) = Base.OneTo(length(RP))
 @inline Base.IteratorSize(RP::RandomParameter) = Base.HasLength()
