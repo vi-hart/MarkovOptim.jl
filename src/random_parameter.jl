@@ -9,9 +9,9 @@ end
 
 RandomParameter(::Type{T}) where T = RandomParameter(Normal(zero(T), one(T)), 0, 0)
 RandomParameter() = RandomParameter(Float64)
-RandomParameter(::Type{T}, n::Int, m::Int) where T = RandomParameter(Normal(zero(T), one(T)), n, m)
-RandomParameter(n::Int, m::Int) = RandomParameter(Float64, n, m)
-function RandomParameter(dist::Normal, n::Int, m::Int)
+RandomParameter(::Type{T}, n::Integer, m::Integer) where T = RandomParameter(Normal(zero(T), one(T)), n, m)
+RandomParameter(n::Integer, m::Integer) = RandomParameter(Float64, n, m)
+function RandomParameter(dist::Normal, n::Integer, m::Integer)
     vec = map(x->rand(dist, m), 1:n)
     RandomParameter(vec, dist)
 end
@@ -28,12 +28,12 @@ Distributions.params(RP::RandomParameter) = Distributions.params(getfield(RP, :d
 @inline Base.eachindex(RP::RandomParameter) = Base.OneTo(length(RP))
 @inline Base.IteratorSize(RP::RandomParameter) = Base.HasLength()
 
-Base.@propagate_inbounds Base.getindex(RP::RandomParameter{T}, I1::Int, I2::Int) where {T} = RP.ps[I1][I2]
-Base.@propagate_inbounds function Base.getindex(RP::RandomParameter{T}, I::Int) where {T}
+Base.@propagate_inbounds Base.getindex(RP::RandomParameter{T}, I1::Integer, I2::Integer) where {T} = RP.ps[I1][I2]
+Base.@propagate_inbounds function Base.getindex(RP::RandomParameter{T}, I::Integer) where {T}
     return getindex(RP, fldmod1(I, size(RP, 2))...)
 end
-Base.@propagate_inbounds Base.setindex!(RP::RandomParameter{T}, v, I1::Int, I2::Int) where {T} = RP.ps[I1][I2] = v
-Base.@propagate_inbounds function Base.setindex!(RP::RandomParameter{T}, v, I::Int) where {T}
+Base.@propagate_inbounds Base.setindex!(RP::RandomParameter{T}, v, I1::Integer, I2::Integer) where {T} = RP.ps[I1][I2] = v
+Base.@propagate_inbounds function Base.setindex!(RP::RandomParameter{T}, v, I::Integer) where {T}
     return setindex(RP, fldmod1(I, size(RP, 2))...)
 end
 
