@@ -63,7 +63,7 @@ is_reduced(M::T) where T<:MarkovModel = hasfield(T, :reduced_params) && !isnothi
 
 rate_function(M::MarkovModel) = getfield(M, :rate_function)
 function rate_function(M::MarkovModel{T, P}, x::Real) where {T, P}
-    ps = get_parameters(rate_parameters(M))
+    ps = Vector(rate_parameters(M))
     return rate_function(M)(x, ps)
 end
 

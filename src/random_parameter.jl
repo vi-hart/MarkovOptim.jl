@@ -34,10 +34,15 @@ Base.@propagate_inbounds function Base.getindex(RP::RandomParameter{T}, I::Integ
 end
 Base.@propagate_inbounds Base.setindex!(RP::RandomParameter{T}, v, I1::Integer, I2::Integer) where {T} = RP.ps[I1][I2] = v
 Base.@propagate_inbounds function Base.setindex!(RP::RandomParameter{T}, v, I::Integer) where {T}
-    return setindex(RP, fldmod1(I, size(RP, 2))...)
+    return setindex!(RP, v, fldmod1(I, size(RP, 2))...)
 end
 
 recursivecopy(RP::RandomParameter) = RandomParameter(copy.(RP.ps), deepcopy(RP.dist))
+Base.Vector(RP::RandomParameter) = getfield(RP, :ps)
+function Base.Matrix(RP::RandomParameter{T}) where T
+    V = Vector(RP)
+    return [ V[i][j]::T for i=1:length(V), j=1:length(V[1]) ]
+end
 
 Base.rand(RP::RandomParameter{T}) where T = rand(RP.dist, size(RP, 2))
 Base.rand(RP::RandomParameter{T}, I::Integer) where T = map(i->rand(RP), Base.OneTo(I))
