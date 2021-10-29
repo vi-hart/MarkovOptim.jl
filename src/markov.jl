@@ -62,7 +62,7 @@ reduced_parameters(M::MarkovModel) = getfield(M, :reduced_params)
 is_reduced(M::T) where T<:MarkovModel = hasfield(T, :reduced_params) && !isnothing(M.reduced_params)
 
 rate_function(M::MarkovModel) = getfield(M, :rate_function)
-function rate_function(M::MarkovModel{T, P}, x::Real) where {T, P}
+function rate_function(M::MarkovModel, x::Real)
     ps = Vector(rate_parameters(M))
     return rate_function(M)(x, ps)
 end
@@ -76,7 +76,7 @@ function _reduce_params(graph::SimpleGraph, α::AbstractMatrix{P}, β::AbstractM
     return inv([D;abs.(D)])*[ic'α;β]
 end
 
-function reduce_params(M::MarkovModel{T, P}) where {T, P}
+function reduce_params(M::MarkovModel)
     graph = get_graph(M)
     α = node_parameters(M)
     β = edge_parameters(M)
@@ -89,7 +89,7 @@ function reduce_params!(M::MarkovModel)
     return M
 end
 
-function rates(M::MarkovModel{T, P}, x::P) where {T, P}
+function rates(M::MarkovModel, x::Real)
     !is_reduced(M) && reduce_params!(M)
     theta = reduced_parameters(M)
     return exp.(theta * rate_function(M, x))
@@ -100,16 +100,16 @@ function _transition_matrix(graph::SimpleGraph, rs::Vector)
     return dic*Diagonal(rs[:])*(-min.(dic, 0)')
 end
 
-transition_matrix(M::MarkovModel{T, P}, x::P) where {T, P} = _transition_matrix(get_graph(M), rates(M, x))
+transition_matrix(M::MarkovModel, x::Real) = _transition_matrix(get_graph(M), rates(M, x))
 
-Base.Matrix(M::MarkovModel{T, P}, x::P) where {T, P} = transition_matrix(M, x)
+Base.Matrix(M::MarkovModel, x::Real) = transition_matrix(M, x)
 
 function _steady_states(α::AbstractMatrix, rs::Vector)
     s = [exp(dot(rs, α[i,:])) for i in 1:size(α, 1)]
     return s /= sum(s)
 end
 
-function steady_states(M::MarkovModel{T, P}, x::Real) where {T, P}
+function steady_states(M::MarkovModel, x::Real)
     rates = rate_function(M, x)
     α = node_parameters(M)
     return _steady_states(α, rates)
@@ -121,9 +121,10 @@ function Base.convert(
     eqs::Vector{Equation} = Equation[],
     observed::Vector{Equation} = Equation[],
     xval::Union{Nothing, Real, Function} = nothing,
-    name::Symbol = nameof(M)
+    name::Symbol = nameof(M),
+    kwargs...
 )
-
+#TODO: Fix equivalency with _reduce_convert
     ratepars = rate_parameters(M)
     nodepars = node_parameters(M)
     edgepars = edge_parameters(M)
@@ -164,7 +165,7 @@ function Base.convert(
     transition_eqs = D.(Symbolics.scalarize(s)) .~ _transition_matrix(graph, rs)*Symbolics.scalarize(s)
     append!(eqs, transition_eqs)
     push!(observed, :out ~ M.observed(s))
-    sys = ODESystem(eqs, t; defaults=defaults, observed=observed, name=name)
+    sys = ODESystem(eqs, t; defaults=defaults, observed=observed, name=name, kwargs...)
     return isnothing(xval) ? sys : structural_simplify(sys)
 end
 
@@ -174,7 +175,25 @@ function _reduce_convert(
     eqs::Vector{Equation} = Equation[],
     observed::Vector{Equation} = Equation[],
     xval::Union{Nothing, Real, Function} = nothing,
-    name::Symbol = nameof(M)
+    name::Symbol = nameof(M),
+    kwargs...
 )
-    ratef = rate_function(M)(x, rate_parameters(M))
+    reduce_params!(M)
+    a = nv(get_graph(M))
+    @variables t, x(t), s[1:a](t)
+    D = Differential(t)
+    _s = Symbolics.scalarize(s)
+    eqs = D.(_s) .~ transition_matrix(M, x)*_s
+    ss = steady_states(M, x)
+    defaults = Dict(Symbolics.scalarize(s) .=> ss)
+    if xval isa Real
+        push!(eqs, x ~ xval)
+        push!(defaults, x=>xval)
+    elseif xval isa Function
+        push!(eqs, x ~ xval(t))
+        push!(defaults, x=>xval(0.))
+    end
+    push!(observed, :out ~ M.observed(s))
+    sys = ODESystem(eqs, t; defaults=defaults, observed=observed, name=name, kwargs...)
+    return isnothing(xval) ? sys : structural_simplify(sys)
 end
