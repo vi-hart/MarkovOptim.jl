@@ -30,11 +30,11 @@ Distributions.params(RP::RandomParameter) = Distributions.params(getfield(RP, :d
 
 Base.@propagate_inbounds Base.getindex(RP::RandomParameter{T}, I1::Integer, I2::Integer) where {T} = RP.ps[I1][I2]
 Base.@propagate_inbounds function Base.getindex(RP::RandomParameter{T}, I::Integer) where {T}
-    return getindex(RP, fldmod1(I, size(RP, 2))...)
+    return getindex(RP, reverse(fldmod1(I, size(RP, 1)))...)
 end
 Base.@propagate_inbounds Base.setindex!(RP::RandomParameter{T}, v, I1::Integer, I2::Integer) where {T} = RP.ps[I1][I2] = v
 Base.@propagate_inbounds function Base.setindex!(RP::RandomParameter{T}, v, I::Integer) where {T}
-    return setindex!(RP, v, fldmod1(I, size(RP, 2))...)
+    return setindex!(RP, v, reverse(fldmod1(I, size(RP, 1)))...)
 end
 
 recursivecopy(RP::RandomParameter) = RandomParameter(copy.(RP.ps), deepcopy(RP.dist))
