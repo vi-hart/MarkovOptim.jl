@@ -68,10 +68,10 @@ end
 
 get_graph(sys::MarkovSystem) = getfield(sys, :graph)
 get_input(sys::MarkovSystem) = getfield(sys, :input)
-rate_function(sys::MarkovSystem) = getfield(sys, :rate_func)
 node_vals(sys::MarkovSystem) = getfield(sys, :node_vals)
 edge_vals(sys::MarkovSystem) = getfield(sys, :edge_vals)
 rate_vals(sys::MarkovSystem) = getfield(sys, :rate_vals)
+get_rate_func(sys::MarkovSystem) = getfield(sys, :rate_func)
 
 function node_ps(sys::MarkovSystem)
     vals = node_vals(sys)
@@ -101,40 +101,77 @@ function get_us(sys::MarkovSystem)
     return scalarize(u)
 end
 
-function MTK.get_eqs(sys::MarkovSystem)
+function rate_function(sys::MarkovSystem, x::Real; substitute=true)
+    ps = _vecOfvec(substitute ? rate_vals(sys) : rate_ps(sys))
+    return get_rate_func(sys)(x, ps)
+end
+rate_function(sys::MarkovSystem; kwargs...) = rate_function(sys, get_input(sys); kwargs...)
+
+function _reduce_params(graph::SimpleGraph, α::AbstractMatrix{P}, β::AbstractMatrix{P}) where P
+    ic = _incidence(graph)
+    E = ne(graph)
+    D = Matrix{P}(undef, E, 2E)
+    D[:,1:2:end] .= I(E)
+    D[:,2:2:end] .= -I(E)
+    return inv([D;abs.(D)])*[ic'α;β]
+end
+
+function reduce_params(sys::MarkovSystem; substitute=true)
     graph = get_graph(sys)
+    if substitute
+        α = node_vals(sys)
+        β = edge_vals(sys)
+    else
+        α = node_ps(sys)
+        β = edge_ps(sys)
+    end
+    return _reduce_params(graph, α, β)
+end
+
+function rates(sys::MarkovSystem, x::Real; substitute=true)
+    theta = reduce_params(sys; substitute=substitute)
+    return exp.(theta * rate_function(sys, x; substitute=substitute))
+end
+
+function _transition_matrix(graph::SimpleGraph, rs::Vector)
+    dic = _directed_incidence(graph)
+    return dic*Diagonal(rs[:])*(-min.(dic, 0)')
+end
+
+function transition_matrix(sys::MarkovSystem, x::Real; substitute=true)
+    return _transition_matrix(get_graph(sys), rates(sys, x; substitute=substitute))
+end
+function transition_matrix(sys::MarkovSystem; substitute=true)
+    return _transition_matrix(get_graph(sys), rates(sys, get_input(sys); substitute=substitute))
+end
+
+function _steady_states(α::AbstractMatrix, rfs::Vector)
+    s = [exp(dot(rfs, α[i,:])) for i in 1:size(α, 1)]
+    return s /= sum(s)
+end
+
+function steady_states(sys::MarkovSystem, x::Real; substitute=true)
+    rfs = rate_function(sys, x; substitute=substitute)
+    α = substitute ? node_vals(sys) : node_ps(sys)
+    return _steady_states(α, rfs)
+end
+steady_states(sys::MarkovSystem; substitute=true) = steady_states(sys, get_input(sys); substitute=substitute)
+
+#TODO: Generate code for the steady states
+function generate_steady_states(sys::MarkovSystem; substitute=true)
+    ss = steady_states(sys; substitute=substitute)
+    build_function(ss, get_input(sys))
+end
+
+function MTK.get_eqs(sys::MarkovSystem; substitute=false)
     iv = MTK.get_iv(sys)
     D = Differential(iv)
     u = get_us(sys)
-    x = get_input(sys)
-    α = node_ps(sys)
-    β = edge_ps(sys)
-    γ = rate_ps(sys)
-    ps = [γ[1,:] for i in 1:size(γ,1)]
-
-    theta = _reduce_params(graph, α, β)
-    rs = exp.(theta * rate_function(sys)(x, ps))
-    eqs = D.(u) .~ _transition_matrix(graph, rs)*u
+    eqs = D.(u) .~ transition_matrix(sys; substitute=substitute)*u
     return append!(eqs, getfield(sys, :eqs))
 end
 
-function reduced_eqs(sys::MarkovSystem)
-    graph = get_graph(sys)
-    iv = MTK.get_iv(sys)
-    D = Differential(iv)
-    u = get_us(sys)
-    x = get_input(sys)
-    α = node_vals(sys)
-    β = edge_vals(sys)
-    γ = rate_vals(sys)
-    ps = [γ[1,:] for i in 1:size(γ,1)]
-
-    theta = _reduce_params(graph, α, β)
-    rs = exp.(theta * rate_function(sys)(x, ps))
-    eqs = D.(u) .~ _transition_matrix(graph, rs)*u
-    return append!(eqs, getfield(sys, :eqs))
-end
-
+#TODO: Include states from input variables
 function MTK.get_states(sys::MarkovSystem)
     _states = Set(get_us(sys))
     for eq in getfield(sys, :eqs)
@@ -148,12 +185,18 @@ function MTK.get_states(sys::MarkovSystem)
     return _states
 end
 
-MTK.get_ps(sys::MarkovSystem) = [node_ps(sys); edge_ps(sys); rate_ps(sys)] |> vec
+#TODO: return all parameters
+function MTK.get_ps(sys::MarkovSystem)
+    ps = vec(node_ps(sys))
+    append!(ps, vec(edge_ps(sys)))
+    append!(ps, vec(rate_ps(sys)))
+    return ps
+end
 
 function MTK.get_observed(sys::MarkovSystem)
     out_rule = getfield(sys, :output)
     if isnothing(out_rule)
-        return nothing
+        return Equation[]
     else
         u = get_us(sys)
         iv = MTK.get_iv(sys)
@@ -161,45 +204,31 @@ function MTK.get_observed(sys::MarkovSystem)
         return out ~ out_rule(u)
     end
 end
-function MTK.get_defaults(sys::MarkovSystem)
+function MTK.get_defaults(sys::MarkovSystem; substitute=false)
     defaults = Dict()
-    x = get_input(sys)
-    α = node_ps(sys)
-    β = edge_ps(sys)
-    γ = rate_ps(sys)
-    ps = [γ[1,:] for i in 1:size(γ,1)]
-    rs = rate_function(sys)(x, ps)
+    rs = rate_function(sys; substitute=substitute)
     push!(defaults, MTK.get_iv(sys)=>0.)
     merge!(defaults, getfield(sys, :defaults))
-    map((x, y) -> push!(defaults, x=>y), α, node_vals(sys))
-    map((x, y) -> push!(defaults, x=>y), β, edge_vals(sys))
-    map((x, y) -> push!(defaults, x=>y), γ, rate_vals(sys))
-    map((x, y) -> push!(defaults, x=>y), get_us(sys), _steady_states(α, rs))
+    if ~substitute
+        α = node_ps(sys)
+        β = edge_ps(sys)
+        γ = rate_ps(sys)
+        map((x, y) -> push!(defaults, x=>y), α, node_vals(sys))
+        map((x, y) -> push!(defaults, x=>y), β, edge_vals(sys))
+        map((x, y) -> push!(defaults, x=>y), γ, rate_vals(sys))
+    end
+    map((x, y) -> push!(defaults, x=>y), get_us(sys), steady_states(sys; substitute=substitute))
     return defaults
 end
 
-function reduced_defaults(sys::MarkovSystem)
-    defaults = Dict()
-    x = get_input(sys)
-    α = node_vals(sys)
-    β = edge_vals(sys)
-    γ = rate_vals(sys)
-    ps = [γ[1,:] for i in 1:size(γ,1)]
-    rs = rate_function(sys)(x, ps)
-    push!(defaults, MTK.get_iv(sys)=>0.)
-    merge!(defaults, getfield(sys, :defaults))
-    map((x, y) -> push!(defaults, x=>y), get_us(sys), _steady_states(α, rs))
-    return defaults
-end
-# function MTK.equations(sys::MarkovSystem) end
-# function MTK.states(sys::MarkovSystem) end
-# function MTK.parameters(sys::MarkovSystem) end
 MTK.observed(sys::MarkovSystem) = [MTK.get_observed(sys); getfield(sys, :observed)]
 
-function Base.convert(::Type{ODESystem}, sys::MarkovSystem; simplify=true, name=nameof(sys))
-    odesys =  ODESystem(MTK.get_eqs(sys),
+MTK.calculate_jacobian(sys::MarkovSystem) = transition_matrix(sys; substitute=false)
+
+function Base.convert(::Type{ODESystem}, sys::MarkovSystem; simplify=true, substitute=false, name=nameof(sys))
+    odesys =  ODESystem(MTK.get_eqs(sys; substitute=substitute),
         MTK.get_iv(sys);
-        defaults=MTK.get_defaults(sys),
+        defaults=MTK.get_defaults(sys; substitute=substitute),
         systems=MTK.get_systems(sys),
         observed=observed(sys),
         name=name
@@ -208,12 +237,5 @@ function Base.convert(::Type{ODESystem}, sys::MarkovSystem; simplify=true, name=
 end
 
 function Base.reduce(::Type{ODESystem}, sys::MarkovSystem; simplify=true, name=nameof(sys))
-    odesys = ODESystem(reduced_eqs(sys),
-        MTK.get_iv(sys);
-        defaults=reduced_defaults(sys),
-        systems=MTK.get_systems(sys),
-        observed=observed(sys),
-        name=name
-    )
-    return simplify ? structural_simplify(odesys; simplify=true) : odesys
+    return convert(ODESystem, sys; simplify=simplify, substitute=true, name=name)
 end

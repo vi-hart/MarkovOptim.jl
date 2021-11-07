@@ -31,3 +31,6 @@ function _directed_incidence(graph::SimpleGraph)
     end
     return ic
 end
+
+_vecOfvec(x::M) where M<:AbstractMatrix = [x[1,:] for i in 1:size(x,1)]
+_vecOfvec(x::P) where P<:RandomParameter = getfield(x, :ps)

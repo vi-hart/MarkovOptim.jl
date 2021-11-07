@@ -7,11 +7,11 @@ function LightGraphs.add_edge!(sys::MarkovSystem{<:RandomParameter}, e::SimpleGr
     @inbounds insert!(edge_vals(sys), index)
     return true
 end
-function LightGraphs.add_edge!(sys::MarkovSystem{RandomParameter}, x)
+function LightGraphs.add_edge!(sys::MarkovSystem{<:RandomParameter}, x)
     graph = get_graph(sys)
     return add_edge!(sys, edgetype(graph)(x))
 end
-LightGraphs.add_edge!(sys::MarkovSystem{RandomParameter}, x, y) = add_edge!(M, edgetype(get_graph(M))(x, y))
+LightGraphs.add_edge!(sys::MarkovSystem{<:RandomParameter}, x, y) = add_edge!(sys, edgetype(get_graph(sys))(x, y))
 
 function LightGraphs.rem_edge!(sys::MarkovSystem{<:RandomParameter}, e::SimpleGraphEdge)
     graph = get_graph(sys)
@@ -23,7 +23,7 @@ function LightGraphs.rem_edge!(sys::MarkovSystem{<:RandomParameter}, e::SimpleGr
     return true
 end
 function LightGraphs.rem_edge!(sys::MarkovSystem{<:RandomParameter}, u::Integer, v::Integer)
-    return rem_edge!(M, edgetype(get_graph(M))(u, v))
+    return rem_edge!(sys, edgetype(get_graph(sys))(u, v))
 end
 
 function LightGraphs.add_vertex!(sys::MarkovSystem{<:RandomParameter})
